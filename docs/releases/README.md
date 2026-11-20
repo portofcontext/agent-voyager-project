@@ -1,80 +1,93 @@
 # Beta packages
 
-SDKs and the CLI are published as GitHub prereleases. Each release contains
-the package, a `release.json` manifest, and `SHA256SUMS`.
+SDKs, adapters, and the CLI are published as GitHub prereleases. Each release
+contains its package, a `release.json` manifest, and `SHA256SUMS`. The manifest
+names the released SDK artifact a dependent package needs.
 
 ## Install
 
 Python SDK:
 
 ```sh
-uv pip install https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b2/agent_voyager_project-0.1.0b2-py3-none-any.whl
+uv pip install https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b3/agent_voyager_project-0.1.0b3-py3-none-any.whl
 ```
 
 TypeScript SDK:
 
 ```sh
-npm install https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-typescript-v0.1.0-beta.2/agent-voyager-project-sdk-0.1.0-beta.2.tgz
+npm install https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-typescript-v0.1.0-beta.3/agent-voyager-project-sdk-0.1.0-beta.3.tgz
 ```
 
-CLI (includes the SDK dependency):
+CLI:
 
 ```sh
-uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.7.0/avp_cli-0.7.0-py3-none-any.whl
+uv tool install --with https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b3/agent_voyager_project-0.1.0b3-py3-none-any.whl https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.8.0/avp_cli-0.8.0-py3-none-any.whl
 avp --help
 ```
 
-`avp update` installs the newest CLI release over the one you have.
-
-Use these URLs to install the beta. `pip install avp-cli` installs the release
-on PyPI, currently 0.5.0. The beta is distributed through GitHub.
+Use these artifact URLs for the beta. They are distributed through GitHub,
+not the package registries. Starting with 0.8.0, `avp update` reads the release
+manifest and installs its SDK along with the CLI. To upgrade an older CLI to
+0.8.0, use the installation command above with `--force`.
 
 ## Publish
 
-Set the version in the package's `pyproject.toml` or `package.json` and update
-its lockfile. Python uses `0.1.0b2`; npm uses `0.1.0-beta.2`.
+Set each package's version and update its lockfile. Python projects have their
+own uv lockfiles; TypeScript packages share the root npm workspace lockfile.
 Before an SDK release, run `make sdk-data` and commit the refreshed snapshots.
-Run `make check`, commit the changes, and push the branch.
+Run `make check`, commit, and push the branch.
 
-From the clean, pushed branch:
+From the clean, pushed branch, publish the SDKs first:
 
 ```sh
 make release-sdk-python
 make release-sdk-typescript
-# Wait for the SDK releases before publishing the CLI that depends on them.
+```
+
+Wait for both SDK releases, then publish the affected adapters:
+
+```sh
+make release-agent NAME=pi
+```
+
+`NAME` is a built-in name from `avp agent list --builtin`. The GitHub Packages
+workflow builds and installs each artifact outside the checkout with its
+released SDK, then checks the adapter's `ping` and `describe` commands.
+
+After the adapters are released, publish and pin their images, then release
+the CLI:
+
+```sh
+make agent-images
 make release-cli
 ```
 
-Each target creates and pushes an annotated tag using the package version.
-The GitHub Packages workflow tests the code, builds the package, installs it
-in a clean environment, then publishes the release. Existing tags are never
-overwritten. Bump the version for another release.
+Each release target creates and pushes an annotated tag using the package
+version. Existing tags are never overwritten. Bump the version for another
+release. Tags are `sdk-python-v<version>`, `sdk-typescript-v<version>`,
+`agent-<name>-v<version>`, and `cli-v<version>`.
 
 ### Built-in agent images
 
-The CLI installs built-in agents from images at
-`ghcr.io/portofcontext/<agent_name>:<version>`, pinned by digest in
-`avp-cli/src/avp_cli/agents/builtins.json`. Before a CLI release that changes
-the source commit or an agent's version there:
+The CLI installs images at `ghcr.io/portofcontext/<agent_name>:<version>`, pinned
+by digest in `avp-cli/src/avp_cli/agents/builtins.json`.
 
-1. Push the branch, then run the Agent images workflow on it. It builds each
-   agent from the pinned commit for amd64 and arm64, and leaves a version that
-   is already published as it is. Bump an agent's version to publish it again.
-2. A new package starts private. Make it public in the organization's package
-   settings, once per agent.
-3. Run `make agent-images` to write the digests to `builtins.json`, and commit.
+1. Update the agent version in the catalog and its Dockerfile. The Dockerfile
+   installs the released adapter and SDK artifacts and needs no source context.
+2. Push the branch and run the Agent images workflow on it. It checks `ping`
+   before publishing amd64 and arm64 images. Published versions are left intact.
+3. Make a new image package public in the organization's package settings.
+4. Run `make agent-images`, commit the image digests, and push before releasing
+   the CLI.
 
-An agent without an `image` there installs by building from the pinned source.
+Without an image pin, or with `--build`, the CLI builds the packaged Dockerfile
+in an empty context. It installs the same released packages.
 
-Tags are `sdk-python-v<version>`, `sdk-typescript-v<version>`, and `cli-v<version>`.
-Beta tags can be cut from the release branch before it merges into `main`.
-
-To build and install-check an artifact locally:
+To build and install-check an artifact locally, use an empty output directory:
 
 ```sh
 python scripts/release.py build sdk-python --out /tmp/avp-sdk-release
 ```
 
-The output directory must be empty. `build` accepts `sdk-python`,
-`sdk-typescript`, and `cli`.
-
+The command accepts every package named by the release targets. Dependent
+packages require their SDK release to exist first.

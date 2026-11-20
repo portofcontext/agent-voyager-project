@@ -1,45 +1,32 @@
 # Agent development
 
-Each agent is an independent project. Its package file and lockfile pin a
-published SDK beta. The CLI ships its Dockerfile and installs it by name:
-
-```sh
-avp agent list --builtin
-avp agent install pydantic-ai
-```
-
-To build local agent changes, use a custom name and the agent's directory as
-context, from the repository root:
-
-```sh
-avp agent install my-pydantic-ai avp-cli/src/avp_cli/agents/dockerfiles/pydantic-ai.Dockerfile --context agents/avp-pydantic-ai/python
-```
-
-## Updating built-in agents
-
-`avp-cli/src/avp_cli/agents/builtins.json` pins a source commit, its GitHub archive's
-SHA-256, and each agent's package version and directory. Dockerfiles live beside
-it in `dockerfiles/`. To upgrade, commit and push the agent changes first, update
-the source pin and checksum, and update the packaged Dockerfiles.
-Check that each declared version matches the agent package at that commit.
-Run the checks, bump the CLI version, and publish a new CLI beta. Published
-CLI versions keep their pins.
+Each adapter is a separate package. In the repository it uses the local SDK;
+a released package declares an SDK version range. See the
+[release guide](../docs/releases/README.md) for publishing and installation.
 
 ## Local SDK development
 
-Adapters use the SDK source from this repository. Python's `tool.uv.sources`
-links the matching SDK; TypeScript uses a relative file dependency. Built-in
-Docker builds use the repository root and bundle the SDK at the same source pin.
-This keeps each adapter and SDK on the same data format.
+Python's `[tool.uv.sources]` links the SDK source. Run `uv sync --locked` and
+`uv run pytest` in the adapter's `python/` directory.
 
-For Python, run `uv sync --locked` and `uv run pytest` in the adapter's `python/`
-directory. For TypeScript, build the SDK first, then the adapter:
+TypeScript uses the root npm workspaces and lockfile. From the repository root:
 
 ```sh
-npm --prefix avp-sdk/typescript ci
-npm --prefix avp-sdk/typescript run build
-npm --prefix agents/avp-pi/typescript ci
-npm --prefix agents/avp-pi/typescript test
+npm ci --ignore-scripts
+make pi-check
+make gemini-cli-check
+make opencode-check
 ```
 
-The `make` adapter targets build their SDK dependency automatically.
+The make targets build the SDK before the adapter. Published npm packages
+contain compiled code and a version-range dependency, without workspace paths.
+
+## Built-in agents
+
+The CLI's Dockerfiles install pinned released adapter and SDK packages without
+a repository build context. `builtins.json` records package versions and image
+digests. Update both the catalog and Dockerfile when releasing an adapter.
+
+To exercise unreleased code in a container, write a temporary Dockerfile in a
+test or script with the repository root as its context. Keep development image
+recipes outside the CLI package.

@@ -1,12 +1,7 @@
-"""The built-in source pin and archive boundary, before any image is built."""
+"""Built-in package installation needs no checkout or source download."""
 
-import hashlib
-import io
-import tarfile
-from contextlib import nullcontext
 from pathlib import Path
 
-import httpx
 import pytest
 from typer.testing import CliRunner
 
@@ -16,76 +11,15 @@ from avp_cli.console import Failed
 from avp_cli.engine import images
 
 
-def archive(name: str, *, link: bool = False) -> bytes:
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w:gz") as output:
-        member = tarfile.TarInfo(name)
-        if link:
-            member.type = tarfile.SYMTYPE
-            member.linkname = "/tmp/outside"
-            output.addfile(member)
-        else:
-            content = b"agent source"
-            member.size = len(content)
-            output.addfile(member, io.BytesIO(content))
-        for extra in (
-            "avp-sdk/python/README.md",
-            "avp-sdk/data/test.json",
-            "spec/v0.1/trajectory.schema.json",
-        ):
-            member = tarfile.TarInfo("agent-voyager-project-test/" + extra)
-            member.size = 2
-            output.addfile(member, io.BytesIO(b"{}"))
-    return buffer.getvalue()
-
-
-def download(monkeypatch: pytest.MonkeyPatch, content: bytes, digest: str | None = None) -> None:
-    source = builtins.Catalog(
-        commit="test",
-        sha256=digest or hashlib.sha256(content).hexdigest(),
-        agents={"pydantic-ai": builtins.Agent("avp-pydantic-ai", "1.0", "agents/example/python")},
-    )
-    monkeypatch.setattr(builtins, "catalog", lambda: source)
-
-    def stream(method: str, url: str, **kwargs: object) -> object:
-        assert url.endswith("/tar.gz/test")
-        return nullcontext(httpx.Response(200, content=content, request=httpx.Request(method, url)))
-
-    monkeypatch.setattr(builtins.httpx, "stream", stream)
-
-
-def test_verified_source_and_packaged_dockerfile_form_the_context(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    download(monkeypatch, archive("agent-voyager-project-test/agents/example/python/main.py"))
-    with builtins.context("pydantic-ai") as directory:
-        assert (directory / "agents/example/python/main.py").read_text() == "agent source"
-        assert (directory / "Dockerfile").read_bytes() == (
-            builtins.PACKAGE / "dockerfiles/pydantic-ai.Dockerfile"
-        ).read_bytes()
-    assert not directory.exists()
-
-
-def test_checksum_mismatch_stops_before_extraction(monkeypatch: pytest.MonkeyPatch) -> None:
-    download(monkeypatch, b"not an archive", digest="0" * 64)
-    with pytest.raises(Failed, match="SHA-256"), builtins.context("pydantic-ai"):
-        pytest.fail("accepted an unverified archive")
-
-
-@pytest.mark.parametrize(
-    ("name", "link", "message"),
-    [
-        ("agent-voyager-project-test/agents/example/python/../../outside", False, "unsafe path"),
-        ("agent-voyager-project-test/agents/example/python/link", True, "link or special file"),
-        ("agent-voyager-project-test/agents/other/main.py", False, "does not contain"),
-    ],
-)
-def test_archive_paths_and_links_are_rejected(
-    monkeypatch: pytest.MonkeyPatch, name: str, link: bool, message: str
-) -> None:
-    download(monkeypatch, archive(name, link=link))
-    with pytest.raises(Failed, match=message), builtins.context("pydantic-ai"):
-        pytest.fail("accepted an unsafe or missing agent source")
+def test_packaged_dockerfile_is_the_only_build_input() -> None:
+    for name, agent in builtins.catalog().agents.items():
+        with builtins.context(name) as directory:
+            assert list(directory.iterdir()) == [directory / "Dockerfile"]
+            text = (directory / "Dockerfile").read_text()
+            assert f"agent-{name}-v{agent.version}/" in text
+            assert "COPY agents/" not in text
+            assert "COPY avp-sdk/" not in text
+        assert not directory.exists()
 
 
 def test_unknown_name_lists_builtins_and_custom_names_cannot_replace_them(tmp_path: Path) -> None:
@@ -107,15 +41,9 @@ def test_unknown_name_lists_builtins_and_custom_names_cannot_replace_them(tmp_pa
     assert "--build is for built-in agents" in str(build.exception)
 
 
-def test_failed_pull_points_to_a_source_build(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_failed_pull_points_to_a_package_build(monkeypatch: pytest.MonkeyPatch) -> None:
     pinned = builtins.Catalog(
-        commit="test",
-        sha256="0" * 64,
-        agents={
-            "pydantic-ai": builtins.Agent(
-                "avp-pydantic-ai", "1.0", "agents/example/python", "pinned"
-            )
-        },
+        agents={"pydantic-ai": builtins.Agent("avp-pydantic-ai", "1.0", "pinned")},
     )
     monkeypatch.setattr(builtins, "catalog", lambda: pinned)
 

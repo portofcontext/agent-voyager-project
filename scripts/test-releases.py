@@ -23,6 +23,17 @@ class ReleaseTests(unittest.TestCase):
             with self.subTest(tag=tag), self.assertRaises(ValueError):
                 release.package_for_tag(tag)
 
+    def test_dependents_install_a_released_sdk(self) -> None:
+        self.assertIsNone(release.sdk_url("sdk-python"))
+        self.assertIsNone(release.sdk_url("sdk-typescript"))
+        for package in release.PACKAGES:
+            if package.startswith("sdk-"):
+                continue
+            with self.subTest(package=package):
+                url = release.sdk_url(package)
+                self.assertIn("/releases/download/sdk-", url)
+                self.assertTrue(url.endswith((".whl", ".tgz")))
+
     def test_dirty_tree_cannot_be_tagged(self) -> None:
         with patch.object(release, "run", return_value=" M file") as run:
             with self.assertRaisesRegex(ValueError, "working-tree"):

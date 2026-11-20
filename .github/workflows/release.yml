@@ -2,7 +2,7 @@ name: GitHub Packages
 
 on:
   push:
-    tags: [sdk-python-v*, sdk-typescript-v*, cli-v*]
+    tags: [sdk-python-v*, sdk-typescript-v*, cli-v*, agent-*-v*]
 
 permissions:
   contents: read

@@ -13,6 +13,14 @@ PACKAGES = {
     "sdk-python": "avp-sdk/python",
     "sdk-typescript": "avp-sdk/typescript",
     "cli": "avp-cli",
+    "agent-claude-code": "agents/avp-claude-agent-sdk/python",
+    "agent-codex": "agents/avp-codex/python",
+    "agent-deep-agents": "agents/avp-deep-agents/python",
+    "agent-gemini-cli": "agents/avp-gemini-cli/typescript",
+    "agent-openai-agents": "agents/avp-openai-agents/python",
+    "agent-opencode": "agents/avp-opencode/typescript",
+    "agent-pi": "agents/avp-pi/typescript",
+    "agent-pydantic-ai": "agents/avp-pydantic-ai/python",
 }
 
 
@@ -22,7 +30,7 @@ def run(*args: str, cwd: Path = ROOT) -> str:
 
 def package_version(package: str) -> str:
     directory = ROOT / PACKAGES[package]
-    if package == "sdk-typescript":
+    if (directory / "package.json").exists():
         return json.loads((directory / "package.json").read_text())["version"]
     return tomllib.loads((directory / "pyproject.toml").read_text())["project"]["version"]
 
@@ -38,18 +46,38 @@ def package_for_tag(tag: str) -> str:
     raise ValueError(f"tag {tag!r} does not match a package version")
 
 
+def sdk_url(package: str) -> str | None:
+    if package.startswith("sdk-"):
+        return None
+    language = "typescript" if PACKAGES[package].endswith("typescript") else "python"
+    sdk = f"sdk-{language}"
+    version = package_version(sdk)
+    artifact = (
+        f"agent-voyager-project-sdk-{version}.tgz"
+        if language == "typescript"
+        else f"agent_voyager_project-{version}-py3-none-any.whl"
+    )
+    return (
+        "https://github.com/portofcontext/agent-voyager-project/releases/download/"
+        f"{release_tag(sdk)}/{artifact}"
+    )
+
+
 def verify_install(package: str, archive: Path) -> None:
     """Install the artifact outside the checkout with its published dependencies."""
     with tempfile.TemporaryDirectory(prefix="avp-release-") as temp:
         consumer = Path(temp)
-        if package == "sdk-typescript":
+        directory = ROOT / PACKAGES[package]
+        sdk = sdk_url(package)
+        dependencies = [sdk] if sdk else []
+        if (directory / "package.json").exists():
             (consumer / "package.json").write_text('{"private":true,"type":"module"}')
             run(
                 "npm",
                 "install",
-                "--ignore-scripts",
                 "--no-audit",
                 "--no-fund",
+                *dependencies,
                 str(archive),
                 cwd=consumer,
             )
@@ -65,12 +93,18 @@ if (c.run_id !== 'release' || !Object.keys(bundledPrices().models).length) proce
 """,
                 cwd=consumer,
             )
+            if package.startswith("agent-"):
+                metadata = json.loads((directory / "package.json").read_text())
+                command = consumer / "node_modules/.bin" / next(iter(metadata["bin"]))
+                check_agent(command, metadata["name"], package_version(package), consumer)
         else:
             environment = consumer / "venv"
             run("uv", "venv", str(environment))
             python = environment / "bin/python"
-            run("uv", "pip", "install", "--python", str(python), str(archive))
-            distribution = "agent-voyager-project" if package == "sdk-python" else "avp-cli"
+            run("uv", "pip", "install", "--python", str(python), *dependencies, str(archive))
+            distribution = tomllib.loads((directory / "pyproject.toml").read_text())["project"][
+                "name"
+            ]
             run(
                 str(python),
                 "-I",
@@ -85,6 +119,10 @@ assert bundled_prices().models
 """,
                 cwd=consumer,
             )
+            if package.startswith("agent-"):
+                project = tomllib.loads((directory / "pyproject.toml").read_text())["project"]
+                command = environment / "bin" / next(iter(project["scripts"]))
+                check_agent(command, distribution, package_version(package), consumer)
             if package == "cli":
                 run(str(environment / "bin/avp"), "--help", cwd=consumer)
                 run(str(environment / "bin/avp"), "agent", "list", "--builtin", cwd=consumer)
@@ -115,14 +153,22 @@ assert bundled_prices().models
                 )
 
 
+def check_agent(command: Path, name: str, version: str, cwd: Path) -> None:
+    assert json.loads(run(str(command), "ping", cwd=cwd))["avp_version"] == "0.1"
+    descriptor = json.loads(run(str(command), "describe", cwd=cwd))
+    assert (descriptor["agent_name"], descriptor["agent_version"]) == (name, version)
+
+
 def build(package: str, out: Path) -> None:
     out = out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     if any(out.iterdir()):
         raise ValueError(f"{out} must be empty")
     directory = ROOT / PACKAGES[package]
-    if package == "sdk-typescript":
-        run("npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund", cwd=directory)
+    if (directory / "package.json").exists():
+        run("npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund")
+        if package != "sdk-typescript":
+            run("npm", "run", "build", cwd=ROOT / PACKAGES["sdk-typescript"])
         run("npm", "pack", "--pack-destination", str(out), cwd=directory)
         archive = next(out.glob("*.tgz"))
     else:
@@ -139,6 +185,8 @@ def build(package: str, out: Path) -> None:
         "commit": run("git", "rev-parse", "HEAD"),
         "sha256": artifacts,
     }
+    if sdk := sdk_url(package):
+        manifest["sdk"] = sdk
     (out / "release.json").write_text(json.dumps(manifest, indent=2) + "\n")
     (out / "SHA256SUMS").write_text(
         "".join(f"{digest}  {name}\n" for name, digest in artifacts.items())
@@ -166,7 +214,7 @@ def tag(package: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["build", "tag", "resolve"])
-    parser.add_argument("package", help="sdk-python, sdk-typescript, cli, or a tag for resolve")
+    parser.add_argument("package", help="package name, or a tag for resolve")
     parser.add_argument("--out", type=Path, default=ROOT / "dist/release")
     args = parser.parse_args()
     if args.action == "resolve":

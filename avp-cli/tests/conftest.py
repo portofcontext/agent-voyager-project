@@ -1,6 +1,7 @@
 """An in-memory credential store in place of the system's, a scratch AVP home,
 and --verbose off."""
 
+import json
 import secrets
 from collections.abc import Generator, Iterator
 from pathlib import Path
@@ -13,7 +14,7 @@ from opensandbox.models.sandboxes import Volume
 
 from avp.descriptor import AgentDescriptor
 from avp_cli import console
-from avp_cli.agents import command, store
+from avp_cli.agents import builtins, command, store
 from avp_cli.engine import images
 from avp_cli.eval import scorers, scoring
 from avp_cli.sandbox import service
@@ -149,3 +150,34 @@ def avp_home(tmp_path_factory: pytest.TempPathFactory) -> Generator[Path]:
         patch.setenv(service.KEY_ENV, secrets.token_hex(32))
         yield home
         service.stop()
+
+
+@pytest.fixture
+def pydantic_builtin(avp_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Exercise unreleased code with a temporary image, not a CLI Dockerfile.
+    root = Path(__file__).resolve().parents[2]
+    source = tmp_path / "source.Dockerfile"
+    source.write_text(
+        "FROM python:3.14-slim\n"
+        "COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /bin/uv\n"
+        "ENV UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy\n"
+        "WORKDIR /repo\n"
+        "COPY avp-sdk/python avp-sdk/python\n"
+        "COPY avp-sdk/data avp-sdk/data\n"
+        "COPY spec/v0.1 spec/v0.1\n"
+        "COPY agents/avp-pydantic-ai/python agents/avp-pydantic-ai/python\n"
+        "WORKDIR /repo/agents/avp-pydantic-ai/python\n"
+        "RUN uv sync --frozen --no-dev --no-editable\n"
+        "ENV PATH=/repo/agents/avp-pydantic-ai/python/.venv/bin:$PATH\n"
+        "WORKDIR /workspace\n"
+        'ENTRYPOINT ["avp-pydantic-ai-cli"]\n'
+    )
+    tag = "localhost/avp-test/pydantic-source"
+    images.build(source, root, tag=tag)
+    package = tmp_path / "package"
+    (package / "dockerfiles").mkdir(parents=True)
+    catalog = json.loads((builtins.PACKAGE / "builtins.json").read_text())
+    catalog["agents"]["pydantic-ai"].pop("image", None)
+    (package / "builtins.json").write_text(json.dumps(catalog))
+    (package / "dockerfiles/pydantic-ai.Dockerfile").write_text(f"FROM {tag}\n")
+    monkeypatch.setattr(builtins, "PACKAGE", package)

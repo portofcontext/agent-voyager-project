@@ -1,19 +1,11 @@
-# Build with the repository root as the context.
+# Installs released packages; no repository build context is needed.
 FROM node:24-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 ENV PI_TELEMETRY=0
-WORKDIR /repo
-COPY avp-sdk/typescript avp-sdk/typescript
-COPY avp-sdk/data avp-sdk/data
-COPY spec/v0.1 spec/v0.1
-COPY agents/avp-pi/typescript agents/avp-pi/typescript
-WORKDIR /repo/avp-sdk/typescript
-RUN npm ci --no-audit --no-fund && npm run build
-WORKDIR /repo/agents/avp-pi/typescript
-RUN npm ci --no-audit --no-fund \
-    && npm run build \
-    && chmod +x dist/src/main.js
-RUN npm link --offline --ignore-scripts --no-audit --no-fund
-ENV PATH=/repo/agents/avp-pi/typescript/node_modules/.bin:$PATH
+WORKDIR /opt/avp
+RUN npm install --omit=dev --no-audit --no-fund \
+    https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-typescript-v0.1.0-beta.3/agent-voyager-project-sdk-0.1.0-beta.3.tgz \
+    https://github.com/portofcontext/agent-voyager-project/releases/download/agent-pi-v0.1.4/avp-pi-0.1.4.tgz
+ENV PATH=/opt/avp/node_modules/.bin:$PATH
 WORKDIR /workspace
 ENTRYPOINT ["avp-pi-cli"]

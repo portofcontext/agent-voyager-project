@@ -4,7 +4,7 @@ An AVP agent using the pinned [Pi coding agent](https://github.com/earendil-work
 Pi owns the session, model calls, and tool execution. Native response and tool
 results feed the [TypeScript SDK Recorder](../../../avp-sdk/README.md).
 
-The project has its own npm lockfile and installs the TypeScript SDK beta from GitHub.
+The project uses the root npm workspace and lockfile for local SDK development.
 It requires Node 22.19 or newer; its sandbox image uses Node 24. From the
 repository root:
 

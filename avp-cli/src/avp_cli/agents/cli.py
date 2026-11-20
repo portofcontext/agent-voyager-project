@@ -83,7 +83,7 @@ def install(
                 image = images.pull(published, tag, progress)
             except Failed as exc:
                 raise Failed(
-                    f"{exc}\n`avp agent install {name} --build` builds it from source instead."
+                    f"{exc}\n`avp agent install {name} --build` builds it from released packages instead."
                 ) from None
         else:
             source = (

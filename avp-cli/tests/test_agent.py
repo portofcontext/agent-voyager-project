@@ -2,6 +2,7 @@
 engine answers."""
 
 import json
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
@@ -35,10 +36,10 @@ def avp(*args: str) -> str:
 
 
 def test_install_builtin_without_checkout(
-    avp_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    avp_home: Path, pydantic_builtin: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    avp("agent", "install", "pydantic-ai")
+    avp("agent", "install", "pydantic-ai", "--build")
     try:
         assert "pong" in avp("agent", "ping", "pydantic-ai")
         descriptor = json.loads(avp("agent", "describe", "pydantic-ai"))
@@ -279,9 +280,7 @@ def test_builtin_with_a_pinned_image_is_pulled_and_build_overrides(
     avp_home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     pinned = builtins.Catalog(
-        commit="test",
-        sha256="0" * 64,
-        agents={"pydantic-ai": builtins.Agent("sh-agent", "1.0.0", "agents/example", "pinned")},
+        agents={"pydantic-ai": builtins.Agent("sh-agent", "1.0.0", "pinned")},
     )
     monkeypatch.setattr(builtins, "catalog", lambda: pinned)
     pulls: list[str] = []
@@ -299,7 +298,9 @@ def test_builtin_with_a_pinned_image_is_pulled_and_build_overrides(
         assert "pong" in avp("agent", "ping", "pydantic-ai")
     finally:
         avp("agent", "uninstall", "pydantic-ai")
-    # --build reaches for the pinned source, which this catalog doesn't have.
-    built = CliRunner().invoke(app, ["agent", "install", "pydantic-ai", "--build"])
-    assert isinstance(built.exception, Failed)
-    assert pulls == ["pinned"]
+    monkeypatch.setattr(builtins, "context", lambda name: nullcontext(AGENT))
+    try:
+        avp("agent", "install", "pydantic-ai", "--build")
+        assert pulls == ["pinned"]
+    finally:
+        avp("agent", "uninstall", "pydantic-ai")

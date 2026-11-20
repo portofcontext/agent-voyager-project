@@ -104,7 +104,8 @@ The CLI's `avp conformance` checks agents against the spec's rules.
 
 ## Develop
 
-Each SDK, CLI, and adapter is an independent project with its own lockfile.
+Each SDK, CLI, and adapter is a separate package. Python projects have their
+own lockfiles; TypeScript packages share the root npm workspace lockfile.
 Install [uv](https://docs.astral.sh/uv/) and Node.js 24, then run these commands
 from the repository root:
 

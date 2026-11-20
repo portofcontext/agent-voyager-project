@@ -5,7 +5,7 @@ An AVP agent built on pinned Gemini CLI 0.63.0 and the
 model calls, tool scheduler, MCP clients, skills, and subagents. The adapter
 configures that runtime from a Commission and records its native events.
 
-The standalone npm project links the SDK by path. Node 22.19 or newer is
+The root npm workspace links the SDK for development. Node 22.19 or newer is
 required; the sandbox image uses Node 24 and includes the pinned `gemini` CLI,
 git, and ripgrep. From the repository root:
 
@@ -75,6 +75,8 @@ scheduler supplies tool results, and all Recorder writes are awaited in order.
   by these hooks.
 - MCP results retain the native model-facing content and error status. Gemini
   does not expose the original MCP structured-content field here.
+- A hidden subagent that changes models within one invocation stops the run.
+  Its aggregate usage cannot be priced as a single model.
 - Context compaction and utility model calls cannot be represented by these
   hooks. Unexpected compaction or helper calls stop the run visibly. Missing
   response usage also fails visibly. Non-image binary tool content is unsupported.

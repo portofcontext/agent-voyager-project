@@ -1,46 +1,36 @@
 {
-  "commit": "fa3a98f7e0ce9995104226cbaf9a088380487667",
-  "sha256": "d910551310c655826c77aa13d4578409cac4c76cfd3b0663340e0c715faac394",
   "agents": {
     "claude-code": {
       "agent_name": "avp-claude-agent-sdk",
-      "version": "0.2.5",
-      "directory": "agents/avp-claude-agent-sdk/python"
+      "version": "0.2.5"
     },
     "codex": {
       "agent_name": "avp-codex",
-      "version": "0.0.6",
-      "directory": "agents/avp-codex/python"
+      "version": "0.0.6"
     },
     "deep-agents": {
       "agent_name": "avp-deep-agents",
-      "version": "0.1.4",
-      "directory": "agents/avp-deep-agents/python"
+      "version": "0.1.4"
     },
     "gemini-cli": {
       "agent_name": "avp-gemini-cli",
-      "version": "0.1.4",
-      "directory": "agents/avp-gemini-cli/typescript"
+      "version": "0.1.4"
     },
     "openai-agents": {
       "agent_name": "avp-openai-agents",
-      "version": "0.0.6",
-      "directory": "agents/avp-openai-agents/python"
+      "version": "0.0.6"
     },
     "opencode": {
       "agent_name": "avp-opencode",
-      "version": "0.1.6",
-      "directory": "agents/avp-opencode/typescript"
+      "version": "0.1.6"
     },
     "pi": {
       "agent_name": "avp-pi",
-      "version": "0.1.4",
-      "directory": "agents/avp-pi/typescript"
+      "version": "0.1.4"
     },
     "pydantic-ai": {
       "agent_name": "avp-pydantic-ai",
-      "version": "0.0.6",
-      "directory": "agents/avp-pydantic-ai/python"
+      "version": "0.0.6"
     }
   }
 }

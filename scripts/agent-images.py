@@ -5,7 +5,7 @@ builds, and the digests the CLI pins.
     python scripts/agent-images.py pin      # write each published image's digest to builtins.json
 
 An image is `ghcr.io/portofcontext/<agent_name>:<version>`, built from the
-source commit in builtins.json with the CLI's Dockerfile for the agent. `pin`
+released packages in the CLI's Dockerfile for the agent. `pin`
 fails when an agent's version has no published image.
 """
 
@@ -35,9 +35,7 @@ def matrix(catalog: dict) -> list[dict[str, str]]:
     return [
         {
             "name": name,
-            "directory": agent["directory"],
             "image": f"{REGISTRY}/{repository(agent)}:{agent['version']}",
-            "commit": catalog["commit"],
         }
         for name, agent in catalog["agents"].items()
     ]

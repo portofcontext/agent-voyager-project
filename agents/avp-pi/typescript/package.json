@@ -3,7 +3,6 @@
   "version": "0.1.4",
   "description": "AVP adapter for the Pi coding agent.",
   "license": "Apache-2.0",
-  "private": true,
   "type": "module",
   "bin": {
     "avp-pi-cli": "./dist/src/main.js"
@@ -15,17 +14,24 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "format:check": "prettier --check src tests package.json tsconfig.json",
-    "test": "npm run build && node --test dist/tests/*.test.js"
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.2.0",
     "@earendil-works/pi-coding-agent": "1.2.0",
     "@earendil-works/pi-mcp": "1.2.0",
-    "@agent-voyager-project/sdk": "file:../../../avp-sdk/typescript"
+    "@agent-voyager-project/sdk": "^0.1.0-beta.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^7.0.2",
     "prettier": "^3.9.10"
-  }
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ]
 }
