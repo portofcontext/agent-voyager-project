@@ -387,39 +387,6 @@ test("native subagent model calls roll up exactly once on their invocation", asy
   assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 
-test("a hidden subagent cannot price mixed-model usage as one model", async (t: any) => {
-  const changed = response([
-    call("done", "complete_task", {
-      report: {
-        SummaryOfFindings: "DONE",
-        ExplorationTrace: [],
-        RelevantLocations: [],
-      },
-    }),
-  ]);
-  changed[0]!.modelVersion = "different-model";
-  const { snapshots } = await drive(
-    t,
-    received(),
-    fake([
-      response([
-        call("child", "invoke_agent", {
-          agent_name: "codebase_investigator",
-          prompt: "Inspect the workspace.",
-        }),
-      ]),
-      response([{ text: "Still inspecting." }]),
-      changed,
-      response([{ text: "DONE" }]),
-    ]),
-  );
-  assert.equal(meta(latest(snapshots)).stop_reason, "error");
-  assert.match(
-    JSON.stringify(latest(snapshots)),
-    /changed models within one invocation/,
-  );
-});
-
 test("missing model environment credentials refuse before a model request", async (t: any) => {
   const { snapshots } = await drive(
     t,

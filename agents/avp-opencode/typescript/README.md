@@ -95,7 +95,3 @@ partial content with unknown usage, abort the native session, and close the run.
   stops visibly. The agent exposes no background subagent capability.
 
 For local SDK changes, see [agent development](../../README.md#local-sdk-development).
-
-Tool durations run from the recorded response timestamp to the native tool result.
-Parallel calls in one response share that starting timestamp; these durations
-include scheduling time and are not native per-tool execution timings.

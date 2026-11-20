@@ -8,8 +8,6 @@
   checkout. TypeScript development uses npm workspaces; built-in Dockerfiles
   install pinned released packages without a source archive.
 - CLI updates install the SDK artifact declared by the release manifest.
-- Gemini stops when a hidden subagent changes models rather than pricing its
-  aggregate usage at the last model's rate.
 
 ### Fixed
 

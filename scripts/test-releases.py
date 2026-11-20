@@ -1,6 +1,11 @@
 """Release tags must identify the exact package version being built."""
 
+import subprocess
+import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from unittest.mock import patch
 
 import release
@@ -39,6 +44,40 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "working-tree"):
                 release.tag("cli")
             run.assert_called_once_with("git", "status", "--porcelain")
+
+    def test_unpublished_sdk_prevents_adapter_release(self) -> None:
+        requests = []
+
+        class MissingRelease(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                requests.append(self.path)
+                self.send_error(404, "SDK has not been released")
+
+            do_HEAD = do_GET
+
+            def log_message(self, *args) -> None:
+                pass
+
+        with HTTPServer(("127.0.0.1", 0), MissingRelease) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            artifact = "/agent_voyager_project-999.0.0-py3-none-any.whl"
+            url = f"http://127.0.0.1:{server.server_port}{artifact}"
+            try:
+                with (
+                    tempfile.TemporaryDirectory() as directory,
+                    patch.object(release, "sdk_url", return_value=url),
+                ):
+                    out = Path(directory)
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        release.build("agent-pydantic-ai", out)
+                    self.assertTrue(list(out.glob("*.whl")))
+                    self.assertIn(artifact, requests)
+                    self.assertFalse((out / "release.json").exists())
+                    self.assertFalse((out / "SHA256SUMS").exists())
+            finally:
+                server.shutdown()
+                thread.join()
 
 
 if __name__ == "__main__":

@@ -75,8 +75,6 @@ scheduler supplies tool results, and all Recorder writes are awaited in order.
   by these hooks.
 - MCP results retain the native model-facing content and error status. Gemini
   does not expose the original MCP structured-content field here.
-- A hidden subagent that changes models within one invocation stops the run.
-  Its aggregate usage cannot be priced as a single model.
 - Context compaction and utility model calls cannot be represented by these
   hooks. Unexpected compaction or helper calls stop the run visibly. Missing
   response usage also fails visibly. Non-image binary tool content is unsupported.

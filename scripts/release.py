@@ -172,7 +172,7 @@ def build(package: str, out: Path) -> None:
         run("npm", "pack", "--pack-destination", str(out), cwd=directory)
         archive = next(out.glob("*.tgz"))
     else:
-        run("uv", "build", "--out-dir", str(out), cwd=directory)
+        run("uv", "build", "--no-sources", "--out-dir", str(out), cwd=directory)
         archive = next(out.glob("*.whl"))
     verify_install(package, archive)
     artifacts = {

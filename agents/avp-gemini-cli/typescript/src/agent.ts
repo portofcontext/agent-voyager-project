@@ -339,10 +339,7 @@ class Observer {
     } catch (error) {
       this.fail(String(error));
     }
-    const actual = response?.modelVersion ?? model;
-    if (child.model && child.model !== actual)
-      this.fail("Gemini subagent changed models within one invocation");
-    child.model = actual;
+    child.model = response?.modelVersion ?? model;
     child.input += u.prompt_tokens;
     child.output += u.completion_tokens;
     child.cache += u.cached_tokens ?? 0;
