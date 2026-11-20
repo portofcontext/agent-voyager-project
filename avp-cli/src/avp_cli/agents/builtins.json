@@ -1,46 +1,44 @@
 {
-  "commit": "fa3a98f7e0ce9995104226cbaf9a088380487667",
-  "sha256": "d910551310c655826c77aa13d4578409cac4c76cfd3b0663340e0c715faac394",
   "agents": {
     "claude-code": {
       "agent_name": "avp-claude-agent-sdk",
       "version": "0.2.5",
-      "directory": "agents/avp-claude-agent-sdk/python"
+      "image": "ghcr.io/portofcontext/avp-claude-agent-sdk:0.2.5@sha256:6b4a7c6b8dbaae8c4264396056555199f9cfa0c3e5b2174ed6d87538bb111bd8"
     },
     "codex": {
       "agent_name": "avp-codex",
       "version": "0.0.6",
-      "directory": "agents/avp-codex/python"
+      "image": "ghcr.io/portofcontext/avp-codex:0.0.6@sha256:c9d87b6324a809688a9d40a8b94927360b4f89d7ed1c50cb94891ecb3ffc6f50"
     },
     "deep-agents": {
       "agent_name": "avp-deep-agents",
       "version": "0.1.4",
-      "directory": "agents/avp-deep-agents/python"
+      "image": "ghcr.io/portofcontext/avp-deep-agents:0.1.4@sha256:312e6367f2954142279f81fd35c4945d103f8523a777d7488a68184637972625"
     },
     "gemini-cli": {
       "agent_name": "avp-gemini-cli",
       "version": "0.1.4",
-      "directory": "agents/avp-gemini-cli/typescript"
+      "image": "ghcr.io/portofcontext/avp-gemini-cli:0.1.4@sha256:d84651187663e2e8c5bcd19e5d8910b6bb9834ef2c7a75f058d9058ba0968039"
     },
     "openai-agents": {
       "agent_name": "avp-openai-agents",
       "version": "0.0.6",
-      "directory": "agents/avp-openai-agents/python"
+      "image": "ghcr.io/portofcontext/avp-openai-agents:0.0.6@sha256:a8be641c56b3babd1528d849478afdeeb8cb34aa4ccb7d4653cfc3ff6fa08edd"
     },
     "opencode": {
       "agent_name": "avp-opencode",
       "version": "0.1.6",
-      "directory": "agents/avp-opencode/typescript"
+      "image": "ghcr.io/portofcontext/avp-opencode:0.1.6@sha256:10be3425c8076a6b768506c456421dce3c1580d71334d4ec9a4fc76c6e30af8a"
     },
     "pi": {
       "agent_name": "avp-pi",
       "version": "0.1.4",
-      "directory": "agents/avp-pi/typescript"
+      "image": "ghcr.io/portofcontext/avp-pi:0.1.4@sha256:a957ba970f49ea7f8c69f7b91b30f91ff97951a11bbc76ccad3fd5f240d86e30"
     },
     "pydantic-ai": {
       "agent_name": "avp-pydantic-ai",
       "version": "0.0.6",
-      "directory": "agents/avp-pydantic-ai/python"
+      "image": "ghcr.io/portofcontext/avp-pydantic-ai:0.0.6@sha256:6785c213796ee5a54abb28cad1fc38ba38b2be9019c681dc6aeae1e2e0559446"
     }
   }
 }

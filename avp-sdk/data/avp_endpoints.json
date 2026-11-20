@@ -1,6 +1,6 @@
 {
  "source": "https://models.dev/api.json",
- "fetched": "2026-11-04T21:27:14.851221Z",
+ "fetched": "2026-11-20T15:54:22.884792Z",
  "providers": {
   "302ai": {
    "base_url": "https://api.302.ai/v1",
@@ -16,6 +16,13 @@
     "prefix": "Bearer "
    }
   },
+  "abliteratedllm": {
+   "base_url": "https://api.abliteratedllm.dev/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "abliteration-ai": {
    "base_url": "https://api.abliteration.ai/v1",
    "auth": {
@@ -25,6 +32,20 @@
   },
   "above": {
    "base_url": "https://api.above.dev/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "adaption": {
+   "base_url": "https://api.prod.adaptionlabs.ai/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "adzuki": {
+   "base_url": "https://adzukiai.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -65,6 +86,13 @@
     "prefix": "Bearer "
    }
   },
+  "aigrow": {
+   "base_url": "https://aigrow.gg/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "aimlapi": {
    "base_url": "https://api.aimlapi.com/v1",
    "auth": {
@@ -79,6 +107,20 @@
     "prefix": "Bearer "
    }
   },
+  "aipg": {
+   "base_url": "https://api.aipowergrid.io/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "aistupidlevel": {
+   "base_url": "https://aistupidlevel.info/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "aixy": {
    "base_url": "https://api.aixy-gateway.com/v1",
    "auth": {
@@ -87,7 +129,7 @@
    }
   },
   "aki-io": {
-   "base_url": "https://aki.io/v1",
+   "base_url": "https://aki.io/openai/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -155,6 +197,13 @@
     "prefix": "Bearer "
    }
   },
+  "anonrouter": {
+   "base_url": "https://api.anonrouter.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "anthropic": {
    "base_url": "https://api.anthropic.com/v1",
    "auth": {
@@ -164,6 +213,13 @@
   },
   "anyapi": {
    "base_url": "https://api.anyapi.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "apiko": {
+   "base_url": "https://api.apiko.app/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -183,8 +239,22 @@
     "prefix": "Bearer "
    }
   },
+  "augure": {
+   "base_url": "https://api.augureai.ca/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "auriko": {
    "base_url": "https://api.auriko.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "autarcho": {
+   "base_url": "https://api.autarcho.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -203,7 +273,7 @@
    }
   },
   "bailing": {
-   "base_url": "https://api.tbox.cn/api/llm/v1",
+   "base_url": "https://api.ant-ling.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -251,8 +321,50 @@
     "prefix": "Bearer "
    }
   },
+  "bumo": {
+   "base_url": "https://router.bumo.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "byteplus": {
+   "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "cedarllm": {
+   "base_url": "https://api.cedarllm.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "cerebras": {
    "base_url": "https://api.cerebras.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "cheapaimodel": {
+   "base_url": "https://api.cheapaimodel.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "cheapest-token": {
+   "base_url": "https://api.cheapest-token.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "cheapllm": {
+   "base_url": "https://cheapllm.shop/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -286,6 +398,13 @@
     "prefix": "Bearer "
    }
   },
+  "cloudcode": {
+   "base_url": "https://api.cloudcode.one/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "cloudferro-sherlock": {
    "base_url": "https://api-sherlock.cloudferro.com/openai/v1/",
    "auth": {
@@ -308,6 +427,13 @@
   },
   "commandcode": {
    "base_url": "https://api.commandcode.ai/provider/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "confidential-ai": {
+   "base_url": "https://api.confidential.ai/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -381,6 +507,20 @@
     "prefix": "Bearer "
    }
   },
+  "dothoosh": {
+   "base_url": "https://gateway.dothoosh.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "doubleword": {
+   "base_url": "https://api.doubleword.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "drun": {
    "base_url": "https://chat.d.run/v1",
    "auth": {
@@ -423,8 +563,22 @@
     "prefix": "Bearer "
    }
   },
+  "entrim": {
+   "base_url": "https://api.entrim.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "evroc": {
    "base_url": "https://models.think.evroc.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "ezkielyna": {
+   "base_url": "https://api.ezkielyna.store/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -437,8 +591,22 @@
     "prefix": "Bearer "
    }
   },
+  "fiftyx": {
+   "base_url": "https://api.ai.50x.energy/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "fireworks-ai": {
    "base_url": "https://api.fireworks.ai/inference/v1/",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "fortytwo": {
+   "base_url": "https://api.fortytwo.network/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -451,6 +619,13 @@
     "prefix": ""
    }
   },
+  "frequency": {
+   "base_url": "https://llm.scalefrequency.com/v2",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "friendli": {
    "base_url": "https://api.friendli.ai/serverless/v1",
    "auth": {
@@ -460,6 +635,13 @@
   },
   "frogbot": {
    "base_url": "https://app.frogbot.ai/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "gisoo": {
+   "base_url": "https://gisoo.pro/api/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -486,6 +668,13 @@
     "prefix": ""
    }
   },
+  "graphn": {
+   "base_url": "https://model.graphn.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "greenpt": {
    "base_url": "https://api.greenpt.ai/v1",
    "auth": {
@@ -508,7 +697,7 @@
    }
   },
   "hetzner": {
-   "base_url": "https://inference.hetzner.com/api/v1",
+   "base_url": "https://inference.hetzner.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -521,6 +710,13 @@
     "prefix": "Bearer "
    }
   },
+  "hostinger-router": {
+   "base_url": "https://router.hostinger.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "hpc-ai": {
    "base_url": "https://api.hpc-ai.com/inference/v1",
    "auth": {
@@ -528,8 +724,29 @@
     "prefix": "Bearer "
    }
   },
+  "huawei-maas": {
+   "base_url": "https://api.modelarts-maas.com/openai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "hubris": {
+   "base_url": "https://api.hubris.pw/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "huggingface": {
    "base_url": "https://router.huggingface.co/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "humain": {
+   "base_url": "https://api.node.humainaic.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -577,8 +794,43 @@
     "prefix": "Bearer "
    }
   },
+  "inferall": {
+   "base_url": "https://api.inferall.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "inference": {
    "base_url": "https://inference.net/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "inference-coop": {
+   "base_url": "https://gateway.inference.coop/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "inferenceapis": {
+   "base_url": "https://api.inferenceapis.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "inferris": {
+   "base_url": "https://api.inferris.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "infersia": {
+   "base_url": "https://api.infersia.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -604,8 +856,22 @@
     "prefix": "Bearer "
    }
   },
+  "isoquant": {
+   "base_url": "https://api.isoquant.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "iteracompute": {
    "base_url": "https://api.iteracompute.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "jad-ai": {
+   "base_url": "https://jadai.freesrv.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -620,6 +886,27 @@
   },
   "jiekou": {
    "base_url": "https://api.jiekou.ai/openai",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "joingonka": {
+   "base_url": "https://gate.joingonka.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "jzstoken": {
+   "base_url": "https://jzstoken.com/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "keln": {
+   "base_url": "https://api.keln.ai/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -653,8 +940,29 @@
     "prefix": "Bearer "
    }
   },
+  "kitani": {
+   "base_url": "https://api.kitani.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "klavo": {
+   "base_url": "https://api.klavo.ru/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "klokintegration": {
    "base_url": "https://api-gw.klok.ipaas.se/proxy/kloker-key/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "korouter": {
+   "base_url": "https://korouter.ai/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -674,8 +982,8 @@
     "prefix": "Bearer "
    }
   },
-  "lilac": {
-   "base_url": "https://api.getlilac.com/v1",
+  "kunavo": {
+   "base_url": "https://api.kunavo.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -683,6 +991,13 @@
   },
   "liquid": {
    "base_url": "https://router.inference.ai.exchange/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "lithosai": {
+   "base_url": "https://api.lithosai.cloud/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -723,6 +1038,13 @@
     "prefix": "Bearer "
    }
   },
+  "logits": {
+   "base_url": "https://api.logits.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "longcat": {
    "base_url": "https://api.longcat.chat/openai",
    "auth": {
@@ -744,8 +1066,22 @@
     "prefix": "Bearer "
    }
   },
+  "lyceum": {
+   "base_url": "https://api.lyceum.technology/openai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "lynkr": {
    "base_url": "http://127.0.0.1:8081/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "mallard": {
+   "base_url": "https://api.mallardai.co.uk/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -760,6 +1096,13 @@
   },
   "melious": {
    "base_url": "https://api.melious.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "meragpt": {
+   "base_url": "https://meragpt.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -859,6 +1202,13 @@
     "prefix": "Bearer "
    }
   },
+  "moneo": {
+   "base_url": "https://api.moneo.one/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "moonshotai": {
    "base_url": "https://api.moonshot.ai/v1",
    "auth": {
@@ -942,6 +1292,20 @@
     "prefix": "Bearer "
    }
   },
+  "nodecode": {
+   "base_url": "https://api.nodecode.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "nokeep": {
+   "base_url": "https://nokeep.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "nova": {
    "base_url": "https://api.nova.amazon.com/v1",
    "auth": {
@@ -958,6 +1322,20 @@
   },
   "nvidia": {
    "base_url": "https://integrate.api.nvidia.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "oathbreaker": {
+   "base_url": "https://oathbreaker.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "obscurify": {
+   "base_url": "https://obscurify.ai/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1033,8 +1411,22 @@
     "prefix": "Bearer "
    }
   },
+  "outerlabs": {
+   "base_url": "https://api.outerlabs.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "ovhcloud": {
    "base_url": "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "paraloncloud": {
+   "base_url": "https://paraloncloud.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1068,6 +1460,20 @@
     "prefix": "Bearer "
    }
   },
+  "phala": {
+   "base_url": "https://inference.phala.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "phase": {
+   "base_url": "https://router.phase.xyz/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "pioneer": {
    "base_url": "https://api.fastino.ai/v1",
    "auth": {
@@ -1089,6 +1495,13 @@
     "prefix": "Bearer "
    }
   },
+  "powerspring": {
+   "base_url": "https://api.powerspring.eu/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "prime": {
    "base_url": "https://api.pinference.ai/api/v1",
    "auth": {
@@ -1098,6 +1511,13 @@
   },
   "privatemode-ai": {
    "base_url": "http://localhost:8080/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "proxystacks": {
+   "base_url": "https://proxystacks.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1117,8 +1537,22 @@
     "prefix": "Bearer "
    }
   },
+  "rayline": {
+   "base_url": "https://api.rayline.ai/v1",
+   "auth": {
+    "header": "x-api-key",
+    "prefix": ""
+   }
+  },
   "reflection": {
    "base_url": "https://api.reflection.ai/openai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "refuseless": {
+   "base_url": "https://api.refuseless.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1145,8 +1579,29 @@
     "prefix": "Bearer "
    }
   },
+  "ruapi": {
+   "base_url": "https://www.ruapi.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "runcrate": {
+   "base_url": "https://api.runcrate.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "runinfra": {
    "base_url": "https://api.runinfra.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "sagg": {
+   "base_url": "https://api.privatedeskai.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1161,6 +1616,13 @@
   },
   "sambanova": {
    "base_url": "https://api.sambanova.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "sandbase": {
+   "base_url": "https://api.sandbase.ai/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1221,6 +1683,20 @@
     "prefix": "Bearer "
    }
   },
+  "sokkan": {
+   "base_url": "https://router.sokkan.ch/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "sparrowcodes": {
+   "base_url": "https://api.sparrowcodes.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "stackit": {
    "base_url": "https://api.openai-compat.model-serving.eu01.onstackit.cloud/v1",
    "auth": {
@@ -1230,6 +1706,13 @@
   },
   "standardcompute": {
    "base_url": "https://api.stdcmpt.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "steadyrouter": {
+   "base_url": "https://api.steadyrouter.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1263,6 +1746,13 @@
     "prefix": "Bearer "
    }
   },
+  "stepping-stone": {
+   "base_url": "https://llm.stoney-cloud.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "subconscious": {
    "base_url": "https://api.subconscious.dev/v1",
    "auth": {
@@ -1277,6 +1767,13 @@
     "prefix": "Bearer "
    }
   },
+  "superbot-gg": {
+   "base_url": "https://api.superbot.gg/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "synthetic": {
    "base_url": "https://api.synthetic.new/openai/v1",
    "auth": {
@@ -1284,8 +1781,22 @@
     "prefix": "Bearer "
    }
   },
-  "tempr": {
-   "base_url": "https://api.temprhq.io/v1",
+  "synthorai": {
+   "base_url": "https://synthorai.io/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "teamorouter": {
+   "base_url": "https://api.teamorouter.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "teapot-router": {
+   "base_url": "https://api.teapotrouter.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1299,7 +1810,7 @@
    }
   },
   "tencent-token-plan": {
-   "base_url": "https://api.lkeap.cloud.tencent.com/plan/v3",
+   "base_url": "https://tokenhub.tencentmaas.com/plan/v3",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1319,8 +1830,22 @@
     "prefix": "Bearer "
    }
   },
+  "tenstorrent": {
+   "base_url": "https://console.tenstorrent.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "the-grid-ai": {
    "base_url": "https://api.thegrid.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "therouter": {
+   "base_url": "https://api.therouter.ai/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1340,6 +1865,13 @@
     "prefix": "Bearer "
    }
   },
+  "toapis": {
+   "base_url": "https://toapis.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "togetherai": {
    "base_url": "https://api.together.xyz/v1",
    "auth": {
@@ -1354,6 +1886,20 @@
     "prefix": "Bearer "
    }
   },
+  "tokenify": {
+   "base_url": "https://api.tokenify.dev/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "tokenlab": {
+   "base_url": "https://api.tokenlab.sh/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "tokenrouter": {
    "base_url": "https://api.tokenrouter.com/v1",
    "auth": {
@@ -1361,8 +1907,22 @@
     "prefix": "Bearer "
    }
   },
+  "tokenwatt": {
+   "base_url": "https://api.tokenwatt.io/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "trustedrouter": {
    "base_url": "https://api.trustedrouter.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "trustedtokens": {
+   "base_url": "https://api.trustedtokens.eu/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1382,8 +1942,36 @@
     "prefix": "Bearer "
    }
   },
+  "unbiased": {
+   "base_url": "https://api.unbiased.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "uncensuredai": {
+   "base_url": "https://uncensuredai.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "unorouter": {
    "base_url": "https://api.unorouter.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "unrestricted": {
+   "base_url": "https://api.unrestricted.sh/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "uplinkswitch": {
+   "base_url": "https://api.uplinkswitch.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1404,6 +1992,13 @@
    }
   },
   "vercel": {
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "verda": {
+   "base_url": "https://inference.verda.com/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "
@@ -1472,6 +2067,13 @@
     "prefix": "Bearer "
    }
   },
+  "watt": {
+   "base_url": "https://api.watt-cloud.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "xai": {
    "base_url": "https://api.x.ai/v1",
    "auth": {
@@ -1514,6 +2116,13 @@
     "prefix": "Bearer "
    }
   },
+  "xxapi": {
+   "base_url": "https://xxapi.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "zai": {
    "base_url": "https://api.z.ai/api/paas/v4",
    "auth": {
@@ -1549,6 +2158,13 @@
     "prefix": "Bearer "
    }
   },
+  "zerogpu": {
+   "base_url": "https://api.zerogpu.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
   "zhipuai": {
    "base_url": "https://open.bigmodel.cn/api/paas/v4",
    "auth": {
@@ -1558,6 +2174,13 @@
   },
   "zhipuai-coding-plan": {
    "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "zro": {
+   "base_url": "https://zro.moonmath.ai/v1",
    "auth": {
     "header": "authorization",
     "prefix": "Bearer "

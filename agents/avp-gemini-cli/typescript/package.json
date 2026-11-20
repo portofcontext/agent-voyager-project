@@ -3,7 +3,6 @@
   "version": "0.1.4",
   "description": "AVP adapter for Gemini CLI.",
   "license": "Apache-2.0",
-  "private": true,
   "type": "module",
   "bin": {
     "avp-gemini-cli-cli": "./dist/src/main.js"
@@ -15,10 +14,11 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "format:check": "prettier --check src tests package.json tsconfig.json",
-    "test": "npm run build && node --test dist/tests/*.test.js"
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "prepack": "npm run build"
   },
   "dependencies": {
-    "@agent-voyager-project/sdk": "file:../../../avp-sdk/typescript",
+    "@agent-voyager-project/sdk": "^0.1.0-beta.3",
     "@google/gemini-cli": "0.63.0",
     "@google/gemini-cli-core": "0.63.0"
   },
@@ -26,5 +26,11 @@
     "@types/node": "^22.0.0",
     "prettier": "^3.9.10",
     "typescript": "^7.0.2"
-  }
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ]
 }

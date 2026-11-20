@@ -6,7 +6,7 @@ session, model calls, tool loop, MCP clients, skills, and subagents. The adapter
 maps a Commission into native configuration and sends native events through
 the SDK Recorder.
 
-The standalone npm project links the SDK by path. It requires Node 22.19 or
+The root npm workspace links the SDK for development. It requires Node 22.19 or
 newer. The sandbox image uses Node 24 and installs the pinned native binary,
 git, ripgrep, and CA certificates before launch. From the repository root:
 

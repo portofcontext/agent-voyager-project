@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Release preparation
+
+- SDKs, adapters, and the CLI install from GitHub release packages outside the
+  checkout. TypeScript development uses npm workspaces; built-in Dockerfiles
+  install pinned released packages without a source archive.
+- CLI updates install the SDK artifact declared by the release manifest.
+
 ### Fixed
 
 - Claude records parent calls before applying early tool results and subagent

@@ -37,7 +37,7 @@ def test_the_mock_has_a_reply_for_every_prompt_the_eval_sends() -> None:
 
 @pytest.mark.skipif(not engine_answers(), reason="no container engine answers")
 def test_hello_world_installs_its_agent_and_every_run_passes(
-    avp_home: Path, monkeypatch: pytest.MonkeyPatch
+    avp_home: Path, pydantic_builtin: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(hello, "AGENTS", ("pydantic-ai",))
     runner = CliRunner()

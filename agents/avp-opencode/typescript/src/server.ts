@@ -1,7 +1,7 @@
 /** One pinned native server per run, with private state and no startup downloads. */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { copyFileSync, mkdirSync, symlinkSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent, fetch as pooledFetch } from "undici";
@@ -51,12 +51,20 @@ export class Server {
     // Reuse the locked build-time installation, with private configuration and
     // metadata, so that it never tries to fetch @opencode-ai/plugin at startup.
     const config = join(options.scratch, "config", "opencode");
-    const project = fileURLToPath(new URL("../../", import.meta.url));
+    const plugin = fileURLToPath(
+      new URL("../package.json", import.meta.resolve("@opencode-ai/plugin")),
+    );
+    const metadata = JSON.parse(readFileSync(plugin, "utf8"));
     mkdirSync(config, { recursive: true });
-    for (const file of ["package.json", "package-lock.json"])
-      copyFileSync(join(project, file), join(config, file));
+    writeFileSync(
+      join(config, "package.json"),
+      JSON.stringify({
+        private: true,
+        dependencies: { "@opencode-ai/plugin": metadata.version },
+      }),
+    );
     symlinkSync(
-      join(project, "node_modules"),
+      dirname(dirname(dirname(plugin))),
       join(config, "node_modules"),
       "junction",
     );

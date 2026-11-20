@@ -5,7 +5,7 @@ An AVP agent built on pinned Gemini CLI 0.63.0 and the
 model calls, tool scheduler, MCP clients, skills, and subagents. The adapter
 configures that runtime from a Commission and records its native events.
 
-The standalone npm project links the SDK by path. Node 22.19 or newer is
+The root npm workspace links the SDK for development. Node 22.19 or newer is
 required; the sandbox image uses Node 24 and includes the pinned `gemini` CLI,
 git, and ripgrep. From the repository root:
 

@@ -3,7 +3,6 @@
   "version": "0.1.6",
   "description": "AVP adapter for the OpenCode coding agent.",
   "license": "Apache-2.0",
-  "private": true,
   "type": "module",
   "bin": {
     "avp-opencode-cli": "./dist/src/main.js"
@@ -12,13 +11,14 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "node node_modules/opencode-ai/postinstall.mjs && tsc -p tsconfig.json",
+    "build": "node --input-type=module -e \"await import(import.meta.resolve('opencode-ai/postinstall.mjs'))\" && tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "format:check": "prettier --check src tests package.json tsconfig.json",
-    "test": "npm run build && node --test --test-concurrency=1 dist/tests/*.test.js"
+    "test": "npm run build && node --test --test-concurrency=1 dist/tests/*.test.js",
+    "prepack": "npm run build"
   },
   "dependencies": {
-    "@agent-voyager-project/sdk": "file:../../../avp-sdk/typescript",
+    "@agent-voyager-project/sdk": "^0.1.0-beta.3",
     "@modelcontextprotocol/sdk": "1.31.0",
     "@opencode-ai/plugin": "1.18.34",
     "@opencode-ai/sdk": "1.18.34",
@@ -29,5 +29,11 @@
     "@types/node": "^22.0.0",
     "prettier": "^3.9.10",
     "typescript": "^7.0.2"
-  }
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ]
 }

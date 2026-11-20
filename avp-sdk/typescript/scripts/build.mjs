@@ -8,7 +8,9 @@ await rm(new URL("dist/", root), { recursive: true, force: true });
 execFileSync(
   process.execPath,
   [
-    fileURLToPath(new URL("node_modules/typescript/bin/tsc", root)),
+    fileURLToPath(
+      new URL("bin/tsc", import.meta.resolve("typescript/package.json")),
+    ),
     "-p",
     "tsconfig.json",
   ],

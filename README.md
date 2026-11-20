@@ -28,7 +28,9 @@ Install the CLI. Requires [uv](https://docs.astral.sh/uv/) and a running
 container engine with a Docker API, such as Docker or podman:
 
 ```sh
-uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.8.0/avp_cli-0.8.0-py3-none-any.whl
+uv tool install \
+  --with https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b3/agent_voyager_project-0.1.0b3-py3-none-any.whl \
+  https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.8.0/avp_cli-0.8.0-py3-none-any.whl
 avp hello-world
 ```
 
@@ -104,7 +106,8 @@ The CLI's `avp conformance` checks agents against the spec's rules.
 
 ## Develop
 
-Each SDK, CLI, and adapter is an independent project with its own lockfile.
+Each SDK, CLI, and adapter is a separate package. Python projects have their
+own lockfiles; TypeScript packages share the root npm workspace lockfile.
 Install [uv](https://docs.astral.sh/uv/) and Node.js 24, then run these commands
 from the repository root:
 

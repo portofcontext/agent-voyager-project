@@ -65,6 +65,17 @@ def releases() -> list[Release]:
     return found
 
 
+def install_command(release: Release) -> list[str]:
+    url = release.wheel.rsplit("/", 1)[0] + "/release.json"
+    try:
+        response = httpx.get(url, timeout=30, follow_redirects=True)
+        response.raise_for_status()
+        sdk = response.json().get("sdk")
+    except (httpx.HTTPError, ValueError) as error:
+        raise Failed(f"couldn't read release manifest at {url}: {error}") from None
+    return ["uv", "tool", "install", "--force", *(["--with", sdk] if sdk else []), release.wheel]
+
+
 def newest(found: list[Release], installed: Version, pre: bool) -> Release | None:
     """The highest release above `installed`. A prerelease counts only with
     `pre`, or when `installed` is one."""
@@ -95,10 +106,10 @@ def update(
     if release is None:
         out.print(f"avp {installed} is the newest release", highlight=False)
         return
-    command = ["uv", "tool", "install", "--force", release.wheel]
     if check:
         out.print(f"avp {release.version} is available; this is {installed}", highlight=False)
         return
+    command = install_command(release)
     if source := checkout():
         raise Failed(
             f"this avp runs from a checkout, {source}. Update the checkout, or install "

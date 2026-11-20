@@ -104,7 +104,7 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │   │                 in a sandbox, and save it. Installing over an agent replaces it.
 │   │                 Shows the download or each build step, and each check, as it runs;
 │   │                 --verbose prints the engine's output. --build builds a built-in
-│   │                 agent from its pinned source, not its published image.
+│   │                 agent from its released packages.
 │   │     avp agent install pydantic-ai [--build]
 │   │     avp agent install my-agent ./Dockerfile [--context ./src]
 │   ├── ✅ list       List installed agents, or built-ins available to install.
@@ -177,9 +177,8 @@ release. `avp agent install NAME` pulls the agent's published image at the
 digest this CLI pins, and checks `ping` and `describe` in a sandbox. Images are
 published for amd64 and arm64 at `ghcr.io/portofcontext/<agent_name>`.
 
-When this CLI pins no image for the agent, or with `--build`, it downloads the
-pinned source, verifies its checksum, and builds the image with the CLI's
-Dockerfile for the agent. No checkout is needed either way. Updating the CLI
+When this CLI pins no image for the agent, or with `--build`, it builds the
+CLI's Dockerfile in an empty context, installing the pinned released packages. No checkout is needed either way. Updating the CLI
 supplies new pins; reinstall an agent to get the version listed by that CLI.
 
 For a custom agent, use `avp agent install my-agent ./Dockerfile`. Its build

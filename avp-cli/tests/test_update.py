@@ -33,7 +33,9 @@ def published(monkeypatch: pytest.MonkeyPatch, *listed: dict[str, Any], installe
         httpx,
         "get",
         lambda *a, **k: httpx.Response(
-            200, json=list(listed), request=httpx.Request("GET", update.RELEASES)
+            200,
+            json={} if str(a[0]).endswith("release.json") else list(listed),
+            request=httpx.Request("GET", str(a[0])),
         ),
     )
     monkeypatch.setattr(update, "current", lambda: Version(installed))
@@ -154,3 +156,23 @@ def test_agent_update_reinstalls_only_outdated_builtins(
     store.delete(outdated)
     store.delete(unversioned)
     assert "up to date" in CliRunner().invoke(app, ["agent", "update"]).output
+
+
+def test_update_supplies_the_released_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
+    sdk = "https://github.test/sdk.whl"
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda url, **kwargs: httpx.Response(
+            200, json={"sdk": sdk}, request=httpx.Request("GET", url)
+        ),
+    )
+    assert update.install_command(update.Release(Version("0.8.0"), WHEEL.format("0.8.0"))) == [
+        "uv",
+        "tool",
+        "install",
+        "--force",
+        "--with",
+        sdk,
+        WHEEL.format("0.8.0"),
+    ]

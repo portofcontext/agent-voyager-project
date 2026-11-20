@@ -1,4 +1,4 @@
-# Each SDK, CLI, and agent owns its dependencies and lockfile.
+# Python projects own their lockfiles; TypeScript projects share an npm workspace lockfile.
 SHELL := /usr/bin/env bash
 UV := uv
 .DEFAULT_GOAL := help
@@ -79,7 +79,6 @@ check-agent:
 .PHONY: pi-build pi-check
 pi-build: sdk-typescript-install
 	cd avp-sdk/typescript && npm run build
-	@npm --prefix $(PI_DIR) ci --no-audit --no-fund
 	@npm --prefix $(PI_DIR) run build
 
 pi-check: pi-build
@@ -90,7 +89,6 @@ pi-check: pi-build
 .PHONY: gemini-cli-build gemini-cli-check
 gemini-cli-build: sdk-typescript-install
 	cd avp-sdk/typescript && npm run build
-	@npm --prefix $(GEMINI_CLI_DIR) ci --no-audit --no-fund
 	@npm --prefix $(GEMINI_CLI_DIR) run build
 
 gemini-cli-check: gemini-cli-build
@@ -101,7 +99,6 @@ gemini-cli-check: gemini-cli-build
 .PHONY: opencode-build opencode-check
 opencode-build: sdk-typescript-install
 	cd avp-sdk/typescript && npm run build
-	@npm --prefix $(OPENCODE_DIR) ci --ignore-scripts --no-audit --no-fund
 	@npm --prefix $(OPENCODE_DIR) run build
 
 opencode-check: opencode-build
@@ -118,7 +115,7 @@ sdk-python-check:
 
 .PHONY: sdk-typescript-install sdk-typescript-generate sdk-typescript-bindings-check sdk-typescript-test sdk-typescript-check
 sdk-typescript-install:
-	@npm --prefix avp-sdk/typescript ci --ignore-scripts --no-audit --no-fund
+	@npm ci --ignore-scripts --no-audit --no-fund
 
 sdk-typescript-generate: sdk-typescript-install
 	@npm --prefix avp-sdk/typescript run generate
@@ -196,3 +193,8 @@ atif-adapters-check: sdk-python-check
 .PHONY: check
 check: format-check lint release-check sdk-data-check sdk-python-check sdk-typescript-check cli-check atif-adapters-check build-skill
 	@echo "All free checks passed."
+
+.PHONY: release-agent
+release-agent:
+	@test -n "$(NAME)" || { echo "usage: make release-agent NAME=pi"; exit 2; }
+	@$(UV) run --project avp-sdk/python python scripts/release.py tag agent-$(NAME)
