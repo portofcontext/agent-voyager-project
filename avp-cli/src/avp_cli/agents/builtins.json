@@ -37,8 +37,7 @@
     },
     "pydantic-ai": {
       "agent_name": "avp-pydantic-ai",
-      "version": "0.0.6",
-      "image": "ghcr.io/portofcontext/avp-pydantic-ai:0.0.6@sha256:6785c213796ee5a54abb28cad1fc38ba38b2be9019c681dc6aeae1e2e0559446"
+      "version": "0.0.7"
     }
   }
 }

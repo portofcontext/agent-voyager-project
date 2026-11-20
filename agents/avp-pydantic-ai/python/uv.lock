@@ -118,7 +118,7 @@ wheels = [
 
 [[package]]
 name = "avp-pydantic-ai"
-version = "0.0.6"
+version = "0.0.7"
 source = { editable = "." }
 dependencies = [
     { name = "agent-voyager-project" },

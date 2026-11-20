@@ -1,6 +1,6 @@
 [project]
 name = "avp-cli"
-version = "0.8.0"
+version = "0.8.1"
 description = "The avp command line: run, evaluate, and check AVP agents in sandboxes."
 readme = "README.md"
 license = "Apache-2.0"

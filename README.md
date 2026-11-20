@@ -5,22 +5,36 @@
 
 > **Status:** Draft v0.1
 
-AVP is an open standard for running and observing AI agents. Shared task definitions and
-ATIF trajectories let you run, compare, and inspect agents across different runtimes.
+AVP is an open standard for describing, running, and observing AI agents.
+A supervisor can inspect an agent, give it a task, and read what happened using
+the same contracts across different runtimes.
 
-A supervisor sends one JSON **Commission** with the task, model, and resources.
+Before a run, the supervisor reads the **Agent Descriptor** to see what an
+agent comes with: its system prompt, supported models, tools, skills, subagents,
+and MCP servers. It can choose an agent and configure the task without knowing
+the runtime's internals.
+
+The supervisor sends one JSON **Commission** with the task, model, and resources.
 The agent records a native **ATIF trajectory** of model responses, tool calls,
 usage, cost, and outcome, with the configuration the run used. Referenced skill
 and image files are saved beside the trajectory.
 See the [ATIF guide](avp-sdk/docs/atif.md) for existing viewers and training-data tools.
 
 ```text
+Supervisor ◀── Descriptor ─── Agent
 Supervisor ─── Commission ──▶ Agent
 Supervisor ◀── Trajectory ─── Agent
 ```
 
 See the [spec overview](spec/v0.1/README.md) for the three contracts and how
 they fit together.
+
+For the CLI, an agent is a container image. Its entrypoint answers `ping`,
+`describe`, and `run`. The image packages the runtime, its dependencies, and
+built-in tools; the task, workspace, and credentials arrive at run time.
+The same CLI can inspect, run, and evaluate each image while the runtime owns
+its model calls, tools, and loop. See [how agents are installed and
+run](avp-cli/COMMANDS.md#how-an-agent-is-installed-and-run).
 
 ## Try it
 
@@ -30,7 +44,7 @@ container engine with a Docker API, such as Docker or podman:
 ```sh
 uv tool install \
   --with https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b3/agent_voyager_project-0.1.0b3-py3-none-any.whl \
-  https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.8.0/avp_cli-0.8.0-py3-none-any.whl
+  https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.8.1/avp_cli-0.8.1-py3-none-any.whl
 avp hello-world
 ```
 
@@ -48,6 +62,12 @@ avp agent install pydantic-ai
 avp agent install claude-code
 avp agent install pi
 avp vault set anthropic
+```
+
+Inspect an agent's Descriptor before configuring its Commission:
+
+```sh
+avp agent describe claude-code
 ```
 
 Save this as `task.json`:

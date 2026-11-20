@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import assertions as atif
+import httpx2
 import pytest
 from anthropic import AsyncAnthropic
 from pydantic_ai import (
@@ -25,6 +26,8 @@ from pydantic_ai import (
 )
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
 from avp.agent_cli import main
 from avp.commission import Commission
@@ -104,6 +107,53 @@ def test_plain_text_response(script, tmp_path: Path) -> None:
     assert events["steps"][0] == {**events["steps"][0], "source": "system", "message": "be terse"}
     assert stopped == {"reason": "converged", "output": "DONE"}
     assert seen[0][0][0].instructions == "be terse"
+
+
+@pytest.mark.parametrize("reported", [True, False], ids=["zero-usage", "missing-usage"])
+def test_zero_usage_is_distinct_from_missing_usage(
+    monkeypatch, tmp_path: Path, reported: bool
+) -> None:
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        response = {
+            "id": "chat-1",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "gpt-5.4-mini",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "DONE"},
+                    "finish_reason": "stop",
+                }
+            ],
+        }
+        if reported:
+            response["usage"] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        return httpx2.Response(200, json=response)
+
+    model = OpenAIChatModel(
+        "gpt-5.4-mini",
+        provider=OpenAIProvider(
+            api_key="test", http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(respond))
+        ),
+    )
+    monkeypatch.setattr(agent, "model", lambda c: model)
+    events = _run(tmp_path, model={"provider": "openai", "id": "gpt-5.4-mini"})
+    assert atif.output(events) == "DONE"
+    response = atif.responses(events)[0]
+    totals = events["final_metrics"]
+    if reported:
+        assert response["metrics"]["prompt_tokens"] == 0
+        assert response["metrics"]["completion_tokens"] == 0
+        assert response["metrics"]["cost_usd"] == 0
+        assert totals["total_prompt_tokens"] == 0
+        assert totals["total_completion_tokens"] == 0
+        assert totals["total_cost_usd"] == 0
+    else:
+        assert "metrics" not in response
+        assert "total_prompt_tokens" not in totals
+        assert "total_completion_tokens" not in totals
+        assert "total_cost_usd" not in totals
 
 
 def _results(events: dict) -> dict[str, dict]:
