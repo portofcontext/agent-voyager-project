@@ -117,7 +117,7 @@ def _args(part: BaseToolCallPart) -> dict[str, Any]:
 def usage(native: RequestUsage) -> Usage | None:
     """One response's usage. Pydantic AI's `input_tokens` already includes
     cache reads and writes, as the Recorder's `prompt_tokens` does."""
-    if not (native.input_tokens or native.output_tokens):
+    if native.unmeasured_requests:
         return None
     return Usage(
         prompt_tokens=native.input_tokens,

@@ -11,6 +11,9 @@
 
 ### Fixed
 
+- Pydantic AI preserves reported zero token usage and cost, while responses
+  with missing usage remain unknown.
+
 - Claude records parent calls before applying early tool results and subagent
   events, and avoids double-counting aggregate and per-response child usage.
 

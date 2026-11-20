@@ -1,6 +1,6 @@
 [project]
 name = "avp-pydantic-ai"
-version = "0.0.6"
+version = "0.0.7"
 description = "AVP agent over Pydantic AI: the framework runs the loop, the adapter writes the Trajectory."
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
